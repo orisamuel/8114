@@ -5,6 +5,7 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>גדוד 8114 — הימורי מילואים</title>
+  <!-- v1.1 -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
@@ -159,10 +160,10 @@
               <h1 style={{fontSize:32, fontWeight:900, margin:"8px 0 4px", letterSpacing:4,
                 background:"linear-gradient(125deg,#d0ea90 20%,#c0a0f8 80%)",
                 WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent"}}>
-                גדוד 8114
+                מבצעים 8114
               </h1>
-              <div style={{fontSize:13, color:"#8060c0", letterSpacing:2, marginTop:4}}>
-                מבצע: <span style={{color:"#c0a0f8"}}>כמה זמן אנחנו פה?</span>
+              <div style={{fontSize:13, color:"#c0a0f8", letterSpacing:2, marginTop:4}}>
+                עד מתי?
               </div>
               <div style={{marginTop:10, fontSize:12, color: syncing ? "#a882e8" : "#3a3058", transition:"color .3s"}}>
                 {syncing ? "⟳ מסנכרן..." : "● מחובר · מתעדכן כל 8 שניות"}
@@ -226,6 +227,9 @@
                   boxShadow:"0 6px 22px rgba(120,70,210,.3)"}}>
                 🎯 רשום הימור
               </button>
+              <div style={{fontSize:12, color:"#7060a0", textAlign:"center", marginTop:8, lineHeight:1.6}}>
+                לאחר ההימור — לחצו על כפתור התשלום בפייבוקס וסמנו ששילמתם ✅
+              </div>
             </div>
 
             {/* FILTERS */}
