@@ -57,6 +57,7 @@
       const [loading, setLoading] = useState(true);
       const [syncing, setSyncing] = useState(false);
       const [notif, setNotif] = useState(null);
+      const [confirmDel, setConfirmDel] = useState(null);
       const pollRef = useRef(null);
 
       async function load() {
@@ -217,24 +218,14 @@
                 )}
               </div>
 
-              <div style={{display:"flex", flexDirection:"column", gap:10}}>
-                <button onClick={handleAdd}
-                  style={{width:"100%", background:"linear-gradient(135deg,#6b3ec8,#7c5abf,#4a7030)",
-                    border:"none", borderRadius:10, padding:14, color:"#f8f0ff",
-                    fontSize:16, fontWeight:900, cursor:"pointer",
-                    fontFamily:"'Courier New',monospace", letterSpacing:2,
-                    boxShadow:"0 6px 22px rgba(120,70,210,.3)"}}>
-                  🎯 רשום הימור
-                </button>
-                <a href={PAYBOX_URL} target="_blank"
-                  style={{display:"block", background:"#0c1a08", border:"2px solid #4a8030",
-                    borderRadius:10, padding:13, color:"#a0e060",
-                    fontSize:15, fontWeight:900, textDecoration:"none",
-                    fontFamily:"'Courier New',monospace", letterSpacing:2, textAlign:"center",
-                    boxShadow:"0 4px 16px rgba(80,180,40,.15)"}}>
-                  💸 שלם פייבוקס
-                </a>
-              </div>
+              <button onClick={handleAdd}
+                style={{width:"100%", background:"linear-gradient(135deg,#6b3ec8,#7c5abf,#4a7030)",
+                  border:"none", borderRadius:10, padding:14, color:"#f8f0ff",
+                  fontSize:16, fontWeight:900, cursor:"pointer",
+                  fontFamily:"'Courier New',monospace", letterSpacing:2,
+                  boxShadow:"0 6px 22px rgba(120,70,210,.3)"}}>
+                🎯 רשום הימור
+              </button>
             </div>
 
             {/* FILTERS */}
@@ -306,9 +297,19 @@
                           boxShadow: bet.paid ? "0 0 16px rgba(140,100,220,.35)" : "none"}}>
                           {bet.paid ? "✅" : "💸"}
                         </button>
-                        <button onClick={()=>handleDel(bet)} style={{
-                          background:"transparent", border:"none",
-                          cursor:"pointer", fontSize:14, padding:"4px 6px", color:"#3a2850"}}>✕</button>
+                        <button onClick={()=>{
+                            if (confirmDel===bet.id) { handleDel(bet); setConfirmDel(null); }
+                            else { setConfirmDel(bet.id); setTimeout(()=>setConfirmDel(null),2500); }
+                          }} style={{
+                          background: confirmDel===bet.id ? "#2a0e0e" : "transparent",
+                          border: confirmDel===bet.id ? "1px solid #c05050" : "none",
+                          borderRadius:6,
+                          cursor:"pointer", fontSize:11, padding:"4px 7px",
+                          color: confirmDel===bet.id ? "#e06060" : "#2e1e38",
+                          fontFamily:"'Courier New',monospace",
+                          transition:"all .2s", whiteSpace:"nowrap"}}>
+                          {confirmDel===bet.id ? "בטוח?" : "✕"}
+                        </button>
                       </div>
 
                       {!bet.paid && (
