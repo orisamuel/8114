@@ -1,0 +1,376 @@
+import { useState, useEffect, useRef } from “react”;
+
+const FIREBASE_URL = “https://project-4304910270927993030-default-rtdb.firebaseio.com”;
+const BETS_PATH = `${FIREBASE_URL}/bets`;
+const PAYBOX_URL = “https://links.payboxapp.com/EIbQPOu9B1b”;
+
+function todayStr() {
+return new Date().toISOString().split(“T”)[0];
+}
+function daysFromToday(dateStr) {
+const diff = new Date(dateStr) - new Date(todayStr());
+return Math.round(diff / (1000 * 60 * 60 * 24));
+}
+function formatDate(ts) {
+return new Date(ts).toLocaleDateString(“he-IL”, { day: “2-digit”, month: “2-digit”, hour: “2-digit”, minute: “2-digit” });
+}
+function formatBetDate(dateStr) {
+if (!dateStr) return “”;
+const [y, m, d] = dateStr.split(”-”);
+return `${d}/${m}/${y}`;
+}
+function getRankEmoji(i) { return [“🥇”,“🥈”,“🥉”][i] || “🎖️”; }
+
+async function fbGet() {
+const r = await fetch(`${BETS_PATH}.json`);
+const data = await r.json();
+if (!data) return [];
+return Object.entries(data).map(([k,v]) => ({ …v, fbKey: k }));
+}
+async function fbSet(id, val) { await fetch(`${BETS_PATH}/${id}.json`, { method:“PUT”, body:JSON.stringify(val) }); }
+async function fbPatch(id, val) { await fetch(`${BETS_PATH}/${id}.json`, { method:“PATCH”, body:JSON.stringify(val) }); }
+async function fbDel(id) { await fetch(`${BETS_PATH}/${id}.json`, { method:“DELETE” }); }
+
+export default function App() {
+const [bets, setBets] = useState([]);
+const [form, setForm] = useState({ name: “”, date: “” });
+const [filter, setFilter] = useState(“all”);
+const [loading, setLoading] = useState(true);
+const [syncing, setSyncing] = useState(false);
+const [notif, setNotif] = useState(null);
+const pollRef = useRef(null);
+
+async function load() {
+try {
+const data = await fbGet();
+setBets(data.sort((a,b) => (a.date||””) < (b.date||””) ? -1 : 1));
+} catch { showNotif(“⚠️ שגיאת חיבור Firebase”,“err”); }
+setLoading(false);
+}
+useEffect(() => { load(); pollRef.current = setInterval(load,8000); return()=>clearInterval(pollRef.current); }, []);
+
+function showNotif(msg, type=“ok”) {
+setNotif({ msg, type });
+setTimeout(() => setNotif(null), 3000);
+}
+
+async function handleAdd() {
+const name = form.name.trim();
+if (!name) { showNotif(“⚠️ שכחת שם חייל!”,“warn”); return; }
+if (!form.date) { showNotif(“⚠️ בחר תאריך!”,“warn”); return; }
+const days = daysFromToday(form.date);
+const bet = { id: Date.now(), name, date: form.date, days, paid: false, ts: Date.now() };
+setSyncing(true);
+setBets(prev => […prev, bet].sort((a,b) => a.date < b.date ? -1 : 1));
+await fbSet(bet.id, bet);
+setSyncing(false);
+setForm({ name:””, date:”” });
+showNotif(`🎯 ${name} נרשם! עכשיו שלם פייבוקס 👇`);
+}
+
+async function togglePaid(bet) {
+const paid = !bet.paid;
+setBets(prev => prev.map(b => b.id===bet.id ? {…b,paid} : b));
+await fbPatch(bet.id, { paid });
+if (paid) showNotif(`💸 ${bet.name} שילם!`);
+}
+
+async function handleDel(bet) {
+setBets(prev => prev.filter(b => b.id!==bet.id));
+await fbDel(bet.id);
+}
+
+const sorted = […bets].sort((a,b) => a.date < b.date ? -1 : 1);
+const paidCount = bets.filter(b=>b.paid).length;
+const unpaidCount = bets.length - paidCount;
+const filtered = filter===“paid” ? sorted.filter(b=>b.paid)
+: filter===“unpaid” ? sorted.filter(b=>!b.paid) : sorted;
+
+const notifColors = {
+ok:   { bg:”#1e1635”, border:”#8b6fd4” },
+warn: { bg:”#2a2210”, border:”#c0a040” },
+err:  { bg:”#2a1010”, border:”#c05050” },
+};
+
+const labelStyle = { display:“block”, fontSize:13, color:”#b090e0”, letterSpacing:2, marginBottom:7, fontWeight:600 };
+const inputStyle = {
+width:“100%”, background:”#0d0b18”, border:“2px solid #2e2250”,
+borderRadius:8, padding:“13px 15px”, color:”#f0ecff”,
+fontFamily:”‘Courier New’,monospace”, fontSize:16,
+outline:“none”, boxSizing:“border-box”,
+};
+
+if (loading) return (
+<div style={{ background:”#0b0914”, minHeight:“100vh”, display:“flex”, flexDirection:“column”, alignItems:“center”, justifyContent:“center”, gap:16 }}>
+<div style={{ fontSize:52 }}>🪖</div>
+<div style={{ color:”#a882e8”, fontFamily:“monospace”, fontSize:20, letterSpacing:4 }}>טוען נתוני גדוד…</div>
+<div style={{ display:“flex”, gap:8 }}>
+{[0,1,2].map(i=><div key={i} style={{ width:10,height:10,borderRadius:“50%”,background:”#8b6fd4”,animation:`p 1.2s ease ${i*.2}s infinite` }}/>)}
+</div>
+<style>{`@keyframes p{0%,100%{opacity:.12}50%{opacity:1}}`}</style>
+</div>
+);
+
+return (
+<div dir=“rtl” style={{ minHeight:“100vh”, background:”#0b0914”, fontFamily:”‘Courier New’,monospace”, color:”#f0ecff” }}>
+
+```
+  <div style={{ height:4, background:"linear-gradient(90deg,#7c4fd4,#a882e8,#4a7830)", position:"sticky", top:0, zIndex:100 }}/>
+
+  {notif && (
+    <div style={{ position:"fixed", top:20, left:"50%", transform:"translateX(-50%)",
+      background:notifColors[notif.type].bg,
+      border:`2px solid ${notifColors[notif.type].border}`,
+      borderRadius:10, padding:"12px 24px", zIndex:9999,
+      fontSize:14, fontWeight:"bold", color:"#f0e8ff",
+      boxShadow:"0 6px 28px rgba(120,80,220,.35)",
+      whiteSpace:"nowrap", animation:"sI .25s ease" }}>
+      {notif.msg}
+    </div>
+  )}
+
+  <div style={{ maxWidth:640, margin:"0 auto", padding:"28px 18px 60px" }}>
+
+    {/* ══ HEADER ══ */}
+    <div style={{ textAlign:"center", marginBottom:32 }}>
+      <div style={{ fontSize:11, color:"#5a3e90", letterSpacing:5, marginBottom:8 }}>⬛ מסווג · שימוש פנימי ⬛</div>
+      <div style={{ fontSize:52 }}>🪖</div>
+      <h1 style={{ fontSize:32, fontWeight:900, margin:"8px 0 4px", letterSpacing:4,
+        background:"linear-gradient(125deg,#d0ea90 20%,#c0a0f8 80%)",
+        WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>
+        גדוד 8114
+      </h1>
+      <div style={{ fontSize:13, color:"#8060c0", letterSpacing:2, marginTop:4 }}>
+        מבצע: <span style={{ color:"#c0a0f8" }}>כמה זמן אנחנו פה?</span>
+      </div>
+      <div style={{ marginTop:10, fontSize:12, color: syncing ? "#a882e8" : "#3a3058", transition:"color .3s" }}>
+        {syncing ? "⟳ מסנכרן..." : "● מחובר · מתעדכן כל 8 שניות"}
+      </div>
+    </div>
+
+    {/* ══ STATS ══ */}
+    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginBottom:28 }}>
+      {[
+        { label:"סה״כ מהמרים", v:bets.length, icon:"👥", color:"#c8b0ff" },
+        { label:"שילמו פייבוקס", v:`${paidCount} / ${bets.length}`, icon:"💸", color:"#b0e870" },
+        { label:"עדיין חייבים", v:unpaidCount, icon:"⏳", color: unpaidCount>0 ? "#ff8080" : "#c8b0ff" },
+      ].map(s=>(
+        <div key={s.label} style={{
+          background:"#100d1e", border:"1px solid #2e2550",
+          borderRadius:12, padding:"16px 8px", textAlign:"center",
+        }}>
+          <div style={{ fontSize:24, marginBottom:6 }}>{s.icon}</div>
+          <div style={{ fontSize:26, fontWeight:900, color:s.color, lineHeight:1 }}>{s.v}</div>
+          <div style={{ fontSize:11, color:"#7060a0", marginTop:6, letterSpacing:1 }}>{s.label}</div>
+        </div>
+      ))}
+    </div>
+
+    {/* ══ FORM ══ */}
+    <div style={{ background:"#100d1e", border:"2px solid #3a2868",
+      borderRadius:16, padding:22, marginBottom:28,
+      boxShadow:"0 0 50px rgba(140,100,230,.1)", position:"relative" }}>
+
+      <div style={{ position:"absolute", top:0, right:0, left:0, height:3,
+        background:"linear-gradient(90deg,#8b5fd4,#c0a0f8,#6a9040)",
+        borderRadius:"16px 16px 0 0" }} />
+
+      <div style={{ fontSize:13, color:"#b090e0", letterSpacing:3, marginBottom:20, marginTop:6, fontWeight:600 }}>
+        ▶ רישום הימור חדש
+      </div>
+
+      <div style={{ marginBottom:16 }}>
+        <label style={labelStyle}>שם / כינוי</label>
+        <input value={form.name}
+          onChange={e=>setForm({...form,name:e.target.value})}
+          onKeyDown={e=>e.key==="Enter"&&handleAdd()}
+          placeholder="מגדל, ג׳ינג׳י, בוסי..."
+          style={inputStyle}
+          onFocus={e=>e.target.style.borderColor="#8b6fd4"}
+          onBlur={e=>e.target.style.borderColor="#2e2250"}
+        />
+      </div>
+
+      <div style={{ marginBottom:22 }}>
+        <label style={labelStyle}>מתי לדעתך נסיים?</label>
+        <input type="date"
+          value={form.date}
+          min={todayStr()}
+          onChange={e=>setForm({...form,date:e.target.value})}
+          style={{ ...inputStyle, color: form.date ? "#f0ecff" : "#5a4880", colorScheme:"dark", maxWidth:"100%", overflow:"hidden" }}
+          onFocus={e=>e.target.style.borderColor="#8b6fd4"}
+          onBlur={e=>e.target.style.borderColor="#2e2250"}
+        />
+        {form.date && (
+          <div style={{ fontSize:13, color:"#b090e0", marginTop:8, fontWeight:600 }}>
+            = {daysFromToday(form.date)} ימים מהיום
+          </div>
+        )}
+      </div>
+
+      {/* CTA buttons */}
+      <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+        <button onClick={handleAdd}
+          style={{ width:"100%",
+            background:"linear-gradient(135deg,#6b3ec8,#7c5abf,#4a7030)",
+            border:"none", borderRadius:10, padding:14,
+            color:"#f8f0ff", fontSize:16, fontWeight:900,
+            cursor:"pointer", fontFamily:"'Courier New',monospace",
+            letterSpacing:2, boxShadow:"0 6px 22px rgba(120,70,210,.3)",
+            transition:"all .2s" }}
+          onMouseOver={e=>{e.target.style.transform="translateY(-2px)";e.target.style.boxShadow="0 8px 28px rgba(120,70,210,.45)";}}
+          onMouseOut={e=>{e.target.style.transform="translateY(0)";e.target.style.boxShadow="0 6px 22px rgba(120,70,210,.3)";}}>
+          🎯 רשום הימור
+        </button>
+
+        {/* Paybox CTA */}
+        <a href={PAYBOX_URL} target="_blank" rel="noopener noreferrer"
+          style={{ display:"block", width:"100%", boxSizing:"border-box",
+            background:"linear-gradient(135deg,#1a3a10,#0e2808)",
+            border:"2px solid #4a8030",
+            borderRadius:10, padding:13,
+            color:"#a0e060", fontSize:15, fontWeight:900,
+            cursor:"pointer", fontFamily:"'Courier New',monospace",
+            letterSpacing:2, textAlign:"center", textDecoration:"none",
+            boxShadow:"0 4px 16px rgba(80,180,40,.15)",
+            transition:"all .2s" }}
+          onMouseOver={e=>{e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 8px 24px rgba(80,180,40,.25)";}}
+          onMouseOut={e=>{e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow="0 4px 16px rgba(80,180,40,.15)";}}>
+          💸 שלם פייבוקס
+        </a>
+      </div>
+    </div>
+
+    {/* ══ FILTERS ══ */}
+    {bets.length > 0 && (
+      <div style={{ display:"flex", gap:8, marginBottom:16, alignItems:"center" }}>
+        {[
+          { key:"all",    label:`הכל (${bets.length})` },
+          { key:"unpaid", label:`חייבים (${unpaidCount})` },
+          { key:"paid",   label:`שילמו (${paidCount})` },
+        ].map(f=>(
+          <button key={f.key} onClick={()=>setFilter(f.key)} style={{
+            padding:"7px 16px",
+            background: filter===f.key ? "#1e1535" : "transparent",
+            border:`1px solid ${filter===f.key ? "#8b6fd4" : "#2a2440"}`,
+            borderRadius:20, cursor:"pointer",
+            color: filter===f.key ? "#d8b8ff" : "#6a5888",
+            fontFamily:"'Courier New',monospace", fontSize:13,
+            fontWeight: filter===f.key ? 700 : 400,
+            transition:"all .15s" }}>
+            {f.label}
+          </button>
+        ))}
+        <button onClick={load} title="רענן" style={{ marginRight:"auto",
+          padding:"7px 12px", background:"transparent",
+          border:"1px solid #2a2440", borderRadius:20,
+          cursor:"pointer", color:"#6a5888", fontSize:14 }}>⟳</button>
+      </div>
+    )}
+
+    {/* ══ LIST ══ */}
+    {filtered.length === 0 ? (
+      <div style={{ textAlign:"center", padding:"50px 20px",
+        border:"2px dashed #1e1838", borderRadius:16, color:"#4a3870" }}>
+        <div style={{ fontSize:48, marginBottom:12 }}>🪖</div>
+        <div style={{ fontSize:15, color:"#6a5090" }}>
+          {bets.length===0 ? "אין הימורים עדיין — מי מתנדב ראשון?" : "אין תוצאות"}
+        </div>
+      </div>
+    ) : (
+      <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+        {filtered.map(bet=>{
+          const idx = sorted.findIndex(b=>b.id===bet.id);
+          const daysLeft = bet.date ? daysFromToday(bet.date) : bet.days;
+          const isPast = daysLeft < 0;
+          return (
+            <div key={bet.id} style={{
+              background: bet.paid ? "#0e1a0c" : "#0f0c1e",
+              border:`2px solid ${bet.paid ? "#3a2d60" : "#221a3c"}`,
+              borderRadius:13, padding:"14px 14px",
+              opacity: bet.paid ? 0.72 : 1,
+              boxShadow: bet.paid ? "inset 0 0 30px rgba(120,80,220,.07)" : "none",
+              transition:"all .2s",
+            }}>
+              {/* Top row */}
+              <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom: bet.paid ? 0 : 10 }}>
+                <div style={{ fontSize:24, minWidth:30, textAlign:"center" }}>
+                  {getRankEmoji(idx)}
+                </div>
+
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontWeight:900, fontSize:19, color:"#f0ecff", marginBottom:4 }}>
+                    {bet.name}
+                  </div>
+                  <div style={{ fontSize:14, color:"#c0a0f8", fontWeight:600, marginBottom:2 }}>
+                    {bet.date ? formatBetDate(bet.date) : "—"}
+                    {bet.date && (
+                      <span style={{ marginRight:8, color: isPast ? "#ff8080" : "#a0c060" }}>
+                        ({isPast ? `איחר ${Math.abs(daysLeft)} ימים 😅` : `עוד ${daysLeft} יום`})
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize:11, color:"#4a3868" }}>נרשם: {formatDate(bet.ts)}</div>
+                </div>
+
+                {/* Paid toggle */}
+                <button onClick={()=>togglePaid(bet)} title={bet.paid?"בטל תשלום":"סמן כשולם"} style={{
+                  background: bet.paid ? "linear-gradient(135deg,#2a1c48,#162410)" : "#0d0b18",
+                  border:`2px solid ${bet.paid ? "#8b6fd4" : "#2a2240"}`,
+                  borderRadius:10, padding:"9px 11px",
+                  cursor:"pointer", fontSize:20,
+                  transition:"all .2s", minWidth:46,
+                  boxShadow: bet.paid ? "0 0 16px rgba(140,100,220,.35)" : "none" }}>
+                  {bet.paid ? "✅" : "💸"}
+                </button>
+
+                <button onClick={()=>handleDel(bet)} style={{
+                  background:"transparent", border:"none",
+                  cursor:"pointer", fontSize:14, padding:"4px 6px",
+                  color:"#3a2850", transition:"color .15s" }}
+                  onMouseOver={e=>e.target.style.color="#d06060"}
+                  onMouseOut={e=>e.target.style.color="#3a2850"}>✕</button>
+              </div>
+
+              {/* Paybox button — only for unpaid */}
+              {!bet.paid && (
+                <a href={PAYBOX_URL} target="_blank" rel="noopener noreferrer"
+                  style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:8,
+                    marginTop:2,
+                    background:"#0c1a08", border:"1px solid #3a6020",
+                    borderRadius:8, padding:"9px 12px",
+                    color:"#90d850", fontSize:13, fontWeight:700,
+                    textDecoration:"none", letterSpacing:1,
+                    transition:"all .2s" }}
+                  onMouseOver={e=>{e.currentTarget.style.background="#112410";e.currentTarget.style.borderColor="#5a9030";}}
+                  onMouseOut={e=>{e.currentTarget.style.background="#0c1a08";e.currentTarget.style.borderColor="#3a6020";}}>
+                  💸 שלם פייבוקס
+                </a>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    )}
+
+    {bets.length > 0 && (
+      <div style={{ textAlign:"center", marginTop:30, color:"#2e2448", fontSize:11, letterSpacing:1 }}>
+        🔥 Firebase · 💸 = לא שילם · ✅ = שילם פייבוקס
+      </div>
+    )}
+  </div>
+
+  <style>{`
+    @keyframes sI { from{opacity:0;transform:translateX(-50%) translateY(-8px)} to{opacity:1;transform:translateX(-50%) translateY(0)} }
+    input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.6) sepia(1) saturate(3) hue-rotate(220deg); cursor:pointer; }
+    input::placeholder { color: #4a3868; }
+    * { box-sizing:border-box; }
+    ::-webkit-scrollbar { width:5px; }
+    ::-webkit-scrollbar-track { background:#0b0914; }
+    ::-webkit-scrollbar-thumb { background:#3a2d58; border-radius:3px; }
+  `}</style>
+</div>
+```
+
+);
+}
