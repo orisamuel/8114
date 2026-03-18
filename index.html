@@ -289,14 +289,29 @@
                           </div>
                           <div style={{fontSize:11, color:"#4a3868"}}>נרשם: {formatDate(bet.ts)}</div>
                         </div>
-                        <button onClick={()=>togglePaid(bet)} style={{
-                          background: bet.paid ? "linear-gradient(135deg,#2a1c48,#162410)" : "#0d0b18",
-                          border:`2px solid ${bet.paid ? "#8b6fd4" : "#2a2240"}`,
-                          borderRadius:10, padding:"9px 11px", cursor:"pointer",
-                          fontSize:20, minWidth:46, transition:"all .2s",
-                          boxShadow: bet.paid ? "0 0 16px rgba(140,100,220,.35)" : "none"}}>
-                          {bet.paid ? "✅" : "💸"}
-                        </button>
+                        <div onClick={()=>togglePaid(bet)} style={{
+                          display:"flex", alignItems:"center", gap:6,
+                          cursor:"pointer", userSelect:"none"}}>
+                          <span style={{fontSize:11, color: bet.paid ? "#a0e060" : "#4a3868", fontWeight:700, transition:"color .3s"}}>שולם</span>
+                          <div style={{
+                            width:52, height:28, borderRadius:14,
+                            background: bet.paid ? "linear-gradient(135deg,#3a2060,#1a3a10)" : "#1a1628",
+                            border:`2px solid ${bet.paid ? "#8b6fd4" : "#2a2240"}`,
+                            position:"relative", transition:"all .3s",
+                            boxShadow: bet.paid ? "0 0 12px rgba(140,100,220,.4)" : "none"}}>
+                            <div style={{
+                              position:"absolute", top:2,
+                              right: bet.paid ? 2 : "auto",
+                              left: bet.paid ? "auto" : 2,
+                              width:20, height:20, borderRadius:"50%",
+                              background: bet.paid ? "#a0e060" : "#3a2e58",
+                              display:"flex", alignItems:"center", justifyContent:"center",
+                              fontSize:11, transition:"all .3s",
+                              boxShadow:"0 1px 4px rgba(0,0,0,.4)"}}>
+                              {bet.paid ? "✅" : "💸"}
+                            </div>
+                          </div>
+                        </div>
                         <button onClick={()=>{
                             if (confirmDel===bet.id) { handleDel(bet); setConfirmDel(null); }
                             else { setConfirmDel(bet.id); setTimeout(()=>setConfirmDel(null),2500); }
