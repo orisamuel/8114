@@ -59,6 +59,10 @@
       const [syncing, setSyncing] = useState(false);
       const [notif, setNotif] = useState(null);
       const [confirmDel, setConfirmDel] = useState(null);
+      const [editingId, setEditingId] = useState(null);
+      const [editDate, setEditDate] = useState("");
+      const EDIT_DEADLINE = new Date("2026-03-21T23:59:00");
+      const canEdit = new Date() < EDIT_DEADLINE;
       const pollRef = useRef(null);
 
       async function load() {
@@ -103,6 +107,15 @@
       async function handleDel(bet) {
         setBets(prev => prev.filter(b => b.id!==bet.id));
         await fbDel(bet.id);
+      }
+
+      async function saveEdit(bet) {
+        if (!editDate) { setEditingId(null); return; }
+        const days = daysFromToday(editDate);
+        setBets(prev => prev.map(b => b.id===bet.id ? {...b, date:editDate, days} : b).sort((a,b)=>a.date<b.date?-1:1));
+        await fbPatch(bet.id, {date:editDate, days});
+        setEditingId(null);
+        showNotif(`✏️ עודכן ל-${formatBetDate(editDate)}`);
       }
 
       const sorted = [...bets].sort((a,b) => a.date < b.date ? -1 : 1);
@@ -283,14 +296,32 @@
                         <div style={{fontSize:24, minWidth:30, textAlign:"center"}}>{rankEmoji(idx)}</div>
                         <div style={{flex:1, minWidth:0}}>
                           <div style={{fontWeight:900, fontSize:19, color:"#f0ecff", marginBottom:4}}>{bet.name}</div>
-                          <div style={{fontSize:14, color:"#c0a0f8", fontWeight:600, marginBottom:2}}>
-                            {formatBetDate(bet.date)}
-                            {bet.date && (
-                              <span style={{marginRight:8, color: isPast ? "#ff8080" : "#a0c060"}}>
-                                ({isPast ? `איחר ${Math.abs(daysLeft)} ימים 😅` : `עוד ${daysLeft} יום`})
-                              </span>
-                            )}
-                          </div>
+                          {editingId===bet.id ? (
+                            <div style={{display:"flex", alignItems:"center", gap:6, marginBottom:4}}>
+                              <input type="date" value={editDate}
+                                min={todayStr()}
+                                onChange={e=>setEditDate(e.target.value)}
+                                style={{background:"#0d0b18", border:"1px solid #7c5abf", borderRadius:6,
+                                  padding:"4px 8px", color:"#f0ecff", fontFamily:"'Courier New',monospace",
+                                  fontSize:13, outline:"none", colorScheme:"dark", flex:1}}
+                              />
+                              <button onClick={()=>saveEdit(bet)} style={{background:"#2a1e48", border:"1px solid #8b6fd4", borderRadius:6, padding:"4px 10px", color:"#c0a0f8", cursor:"pointer", fontSize:12, fontFamily:"'Courier New',monospace"}}>שמור</button>
+                              <button onClick={()=>setEditingId(null)} style={{background:"transparent", border:"none", color:"#4a3868", cursor:"pointer", fontSize:13}}>✕</button>
+                            </div>
+                          ) : (
+                            <div style={{fontSize:14, color:"#c0a0f8", fontWeight:600, marginBottom:2, display:"flex", alignItems:"center", gap:8}}>
+                              {formatBetDate(bet.date)}
+                              {bet.date && (
+                                <span style={{color: isPast ? "#ff8080" : "#a0c060"}}>
+                                  ({isPast ? `איחר ${Math.abs(daysLeft)} ימים 😅` : `עוד ${daysLeft} יום`})
+                                </span>
+                              )}
+                              {canEdit && (
+                                <span onClick={()=>{setEditingId(bet.id); setEditDate(bet.date);}}
+                                  style={{fontSize:12, color:"#4a3868", cursor:"pointer", marginRight:2}} title="ערוך תאריך">✏️</span>
+                              )}
+                            </div>
+                          )}
                           <div style={{fontSize:11, color:"#4a3868"}}>נרשם: {formatDate(bet.ts)}</div>
                         </div>
                         <div onClick={()=>togglePaid(bet)} style={{
