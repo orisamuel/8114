@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>גדוד 8114 — הקו הבא</title>
+  <!-- v1.0 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0b0914; font-family: 'Courier New', monospace; }
+    @keyframes pulse { 0%,100%{opacity:.12} 50%{opacity:1} }
+    @keyframes slideIn { from{opacity:0;transform:translateX(-50%) translateY(-8px)} to{opacity:1;transform:translateX(-50%) translateY(0)} }
+    input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.6) sepia(1) saturate(3) hue-rotate(220deg); cursor:pointer; }
+    input::placeholder { color: #4a3868; }
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: #0b0914; }
+    ::-webkit-scrollbar-thumb { background: #3a2d58; border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    // ← הדבק כאן את ה-URL לאחר פריסת ה-Apps Script
+    const SCRIPT_URL = "PASTE_YOUR_APPS_SCRIPT_URL_HERE";
+    const PAYBOX_URL = "https://links.payboxapp.com/EIbQPOu9B1b";
+    const DEADLINE = new Date("2026-05-18T23:59:00");
+
+    const { useState, useEffect, useRef } = React;
+
+    function todayStr() { return new Date().toISOString().split("T")[0]; }
+    function daysFromToday(d) { return Math.round((new Date(d) - new Date(todayStr())) / 86400000); }
+    function formatBetDate(d) {
+      if (!d) return "";
+      const [y,m,dd] = d.split("-");
+      return `${dd}/${m}/${y}`;
+    }
+    function rankEmoji(i) { return ["🥇","🥈","🥉"][i] || "🎖️"; }
+
+    function loadMyInfo() {
+      try { return JSON.parse(localStorage.getItem("kav_bet") || "null"); } catch { return null; }
+    }
+    function saveMyInfo(info) { localStorage.setItem("kav_bet", JSON.stringify(info)); }
+
+    async function api(params) {
+      const url = new URL(SCRIPT_URL);
+      url.searchParams.set("_t", Date.now());
+      Object.entries(params).forEach(([k,v]) => url.searchParams.set(k, v));
+      const r = await fetch(url.toString(), { redirect: "follow" });
+      const text = await r.text();
+      return JSON.parse(text);
+    }
+
+    function App() {
+      const [bets, setBets] = useState([]);
+      const [form, setForm] = useState({ name: "", personalNum: "", date: "" });
+      const [filter, setFilter] = useState("all");
+      const [loading, setLoading] = useState(true);
+      const [syncing, setSyncing] = useState(false);
+      const [notif, setNotif] = useState(null);
+      const [editingId, setEditingId] = useState(null);
+      const [editDate, setEditDate] = useState("");
+      const [editNumInput, setEditNumInput] = useState("");
+      const [confirmDel, setConfirmDel] = useState(null);
+      const [delNumInput, setDelNumInput] = useState("");
+      const [paidNumInput, setPaidNumInput] = useState({});
+      const pollRef = useRef(null);
+
+      const isOpen = new Date() < DEADLINE;
+
+      async function load() {
+        try {
+          const data = await api({ action: "getAll" });
+          if (Array.isArray(data)) {
+            setBets(data.sort((a,b) => a.date < b.date ? -1 : 1));
+          }
+        } catch { showNotif("⚠️ שגיאת חיבור", "err"); }
+        setLoading(false);
+      }
+
+      useEffect(() => {
+        load();
+        pollRef.current = setInterval(load, 10000);
+        return () => clearInterval(pollRef.current);
+      }, []);
+
+      function showNotif(msg, type="ok") {
+        setNotif({ msg, type });
+        setTimeout(() => setNotif(null), 3500);
+      }
+
+      async function handleAdd() {
+        const name = form.name.trim();
+        const personalNum = form.personalNum.trim();
+        if (!name) { showNotif("⚠️ שכחת שם!", "warn"); return; }
+        if (!personalNum) { showNotif("⚠️ הכנס מספר אישי!", "warn"); return; }
+        if (!form.date) { showNotif("⚠️ בחר תאריך!", "warn"); return; }
+        if (!isOpen) { showNotif("⛔ ההימורים סגורים", "err"); return; }
+        setSyncing(true);
+        try {
+          const ts = String(Date.now());
+          const res = await api({ action: "add", name, personalNum, date: form.date, ts });
+          if (res.error) throw new Error(res.error);
+          const id = res.id || ts;
+          saveMyInfo({ myId: String(id), personalNum });
+          setForm({ name: "", personalNum: "", date: "" });
+          await load();
+          showNotif(`🎯 ${name} נרשם! עכשיו שלם פייבוקס 👇`);
+        } catch(e) {
+          showNotif("⚠️ " + e.message, "err");
+        }
+        setSyncing(false);
+      }
+
+      async function handleTogglePaid(bet, pn) {
+        setSyncing(true);
+        try {
+          const res = await api({ action: "togglePaid", id: bet.id, personalNum: pn });
+          if (res.error) throw new Error(res.error);
+          setBets(prev => prev.map(b => String(b.id)===String(bet.id) ? {...b, paid: res.paid} : b));
+          setPaidNumInput(prev => ({ ...prev, [bet.id]: "" }));
+          showNotif(res.paid ? "💸 סומן כשולם!" : "↩️ סומן כלא שולם");
+        } catch(e) {
+          showNotif("⚠️ " + e.message, "err");
+        }
+        setSyncing(false);
+      }
+
+      async function doEditSave(bet, pn) {
+        if (!editDate) { setEditingId(null); return; }
+        setSyncing(true);
+        try {
+          const res = await api({ action: "editDate", id: bet.id, date: editDate, personalNum: pn });
+          if (res.error) throw new Error(res.error);
+          setBets(prev => prev.map(b => String(b.id)===String(bet.id) ? {...b, date: editDate} : b).sort((a,b) => a.date<b.date?-1:1));
+          setEditingId(null);
+          setEditNumInput("");
+          showNotif(`✏️ עודכן ל-${formatBetDate(editDate)}`);
+        } catch(e) {
+          showNotif("⚠️ " + e.message, "err");
+        }
+        setSyncing(false);
+      }
+
+      async function doDelete(bet, pn) {
+        setSyncing(true);
+        try {
+          const res = await api({ action: "delete", id: bet.id, personalNum: pn });
+          if (res.error) throw new Error(res.error);
+          setBets(prev => prev.filter(b => String(b.id)!==String(bet.id)));
+          const info = loadMyInfo();
+          if (info && String(info.myId) === String(bet.id)) localStorage.removeItem("kav_bet");
+          setConfirmDel(null);
+          setDelNumInput("");
+          showNotif("🗑️ הימור נמחק");
+        } catch(e) {
+          showNotif("⚠️ " + e.message, "err");
+        }
+        setSyncing(false);
+      }
+
+      const myInfo = loadMyInfo();
+      const sorted = [...bets].sort((a,b) => a.date < b.date ? -1 : 1);
+      const paidCount = bets.filter(b=>b.paid).length;
+      const unpaidCount = bets.length - paidCount;
+      const filtered = filter==="paid" ? sorted.filter(b=>b.paid)
+        : filter==="unpaid" ? sorted.filter(b=>!b.paid) : sorted;
+
+      const nColors = {
+        ok:   { bg:"#1e1635", border:"#8b6fd4" },
+        warn: { bg:"#2a2210", border:"#c0a040" },
+        err:  { bg:"#2a1010", border:"#c05050" },
+      };
+      const labelStyle = { display:"block", fontSize:13, color:"#b090e0", letterSpacing:2, marginBottom:7, fontWeight:600 };
+      const inputStyle = {
+        width:"100%", background:"#0d0b18", border:"2px solid #2e2250",
+        borderRadius:8, padding:"13px 15px", color:"#f0ecff",
+        fontFamily:"'Courier New',monospace", fontSize:16,
+        outline:"none",
+      };
+      const smallInputStyle = {
+        background:"#0d0b18", border:"1px solid #7c5abf", borderRadius:6,
+        padding:"6px 10px", color:"#f0ecff", fontFamily:"'Courier New',monospace",
+        fontSize:13, outline:"none", width:"100%",
+      };
+
+      if (loading) return (
+        <div style={{background:"#0b0914", minHeight:"100vh", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:16}}>
+          <div style={{fontSize:52}}>🪖</div>
+          <div style={{color:"#a882e8", fontSize:20, letterSpacing:4}}>טוען נתוני גדוד...</div>
+          <div style={{display:"flex", gap:8}}>
+            {[0,1,2].map(i => <div key={i} style={{width:10, height:10, borderRadius:"50%", background:"#8b6fd4", animation:`pulse 1.2s ease ${i*.2}s infinite`}}/>)}
+          </div>
+        </div>
+      );
+
+      return (
+        <div style={{minHeight:"100vh", background:"#0b0914", fontFamily:"'Courier New',monospace", color:"#f0ecff"}}>
+
+          <div style={{height:4, background:"linear-gradient(90deg,#7c4fd4,#a882e8,#4a7830)", position:"sticky", top:0, zIndex:100}}/>
+
+          {notif && (
+            <div style={{position:"fixed", top:20, left:"50%", transform:"translateX(-50%)",
+              background:nColors[notif.type].bg, border:`2px solid ${nColors[notif.type].border}`,
+              borderRadius:10, padding:"12px 24px", zIndex:9999,
+              fontSize:14, fontWeight:"bold", color:"#f0e8ff",
+              boxShadow:"0 6px 28px rgba(120,80,220,.35)",
+              whiteSpace:"nowrap", animation:"slideIn .25s ease"}}>
+              {notif.msg}
+            </div>
+          )}
+
+          <div style={{maxWidth:640, margin:"0 auto", padding:"28px 18px 60px"}}>
+
+            {/* HEADER */}
+            <div style={{textAlign:"center", marginBottom:32}}>
+              <div style={{fontSize:11, color:"#5a3e90", letterSpacing:5, marginBottom:8}}>⬛ מסווג · שימוש פנימי ⬛</div>
+              <div style={{fontSize:52}}>🪖</div>
+              <h1 style={{fontSize:30, fontWeight:900, margin:"8px 0 4px", letterSpacing:3,
+                background:"linear-gradient(125deg,#d0ea90 20%,#c0a0f8 80%)",
+                WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent"}}>
+                מתי הקו הבא?
+              </h1>
+              <div style={{fontSize:13, color:"#c0a0f8", letterSpacing:2, marginTop:4}}>
+                גדוד 8114 · הימרו על תאריך השחרור
+              </div>
+              <div style={{marginTop:6, fontSize:11, color:"#4a3868"}}>
+                סגירת הימורים: 18/05/2026
+              </div>
+              <div style={{marginTop:8, fontSize:12, color: syncing ? "#a882e8" : "#3a3058", transition:"color .3s"}}>
+                {syncing ? "⟳ מסנכרן..." : "● מחובר · מתעדכן כל 10 שניות"}
+              </div>
+            </div>
+
+            {/* STATS */}
+            <div style={{display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginBottom:28}}>
+              {[
+                { label:"סה״כ מהמרים", v:bets.length, icon:"👥", color:"#c8b0ff" },
+                { label:"שילמו פייבוקס", v:`${paidCount} / ${bets.length}`, icon:"💸", color:"#b0e870" },
+                { label:"עדיין חייבים", v:unpaidCount, icon:"⏳", color: unpaidCount>0 ? "#ff8080" : "#c8b0ff" },
+              ].map(s => (
+                <div key={s.label} style={{background:"#100d1e", border:"1px solid #2e2550", borderRadius:12, padding:"16px 8px", textAlign:"center"}}>
+                  <div style={{fontSize:24, marginBottom:6}}>{s.icon}</div>
+                  <div style={{fontSize:26, fontWeight:900, color:s.color, lineHeight:1}}>{s.v}</div>
+                  <div style={{fontSize:11, color:"#7060a0", marginTop:6, letterSpacing:1}}>{s.label}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* FORM */}
+            {isOpen ? (
+              <div style={{background:"#100d1e", border:"2px solid #3a2868", borderRadius:16, padding:22, marginBottom:28, boxShadow:"0 0 50px rgba(140,100,230,.1)", position:"relative"}}>
+                <div style={{position:"absolute", top:0, right:0, left:0, height:3, background:"linear-gradient(90deg,#8b5fd4,#c0a0f8,#6a9040)", borderRadius:"16px 16px 0 0"}}/>
+                <div style={{fontSize:13, color:"#b090e0", letterSpacing:3, marginBottom:20, marginTop:6, fontWeight:600}}>▶ רישום הימור חדש</div>
+
+                <div style={{marginBottom:16}}>
+                  <label style={labelStyle}>שם / כינוי</label>
+                  <input value={form.name}
+                    onChange={e=>setForm({...form,name:e.target.value})}
+                    onKeyDown={e=>e.key==="Enter"&&handleAdd()}
+                    placeholder="מגדל, ג׳ינג׳י, בוסי..."
+                    style={inputStyle}
+                    onFocus={e=>e.target.style.borderColor="#8b6fd4"}
+                    onBlur={e=>e.target.style.borderColor="#2e2250"}
+                  />
+                </div>
+
+                <div style={{marginBottom:16}}>
+                  <label style={labelStyle}>מספר אישי</label>
+                  <input value={form.personalNum}
+                    onChange={e=>setForm({...form,personalNum:e.target.value})}
+                    placeholder="בחרו מספר שתזכרו"
+                    style={inputStyle}
+                    onFocus={e=>e.target.style.borderColor="#8b6fd4"}
+                    onBlur={e=>e.target.style.borderColor="#2e2250"}
+                  />
+                  <div style={{fontSize:11, color:"#8060a0", marginTop:7, lineHeight:1.6, padding:"8px 12px", background:"#0d0b18", borderRadius:7, border:"1px solid #2a1e48"}}>
+                    ⚠️ לא מספר צבאי אמיתי! בחרו מספר שרק אתם יודעים.<br/>
+                    תצטרכו אותו כדי לערוך או למחוק את ההימור שלכם.
+                  </div>
+                </div>
+
+                <div style={{marginBottom:22}}>
+                  <label style={labelStyle}>מתי לדעתך יסתיים הקו?</label>
+                  <input type="date"
+                    value={form.date}
+                    min={todayStr()}
+                    onChange={e=>setForm({...form,date:e.target.value})}
+                    style={{...inputStyle, color: form.date ? "#f0ecff" : "#5a4880", colorScheme:"dark"}}
+                    onFocus={e=>e.target.style.borderColor="#8b6fd4"}
+                    onBlur={e=>e.target.style.borderColor="#2e2250"}
+                  />
+                  {form.date && (
+                    <div style={{fontSize:13, color:"#b090e0", marginTop:8, fontWeight:600}}>
+                      = {daysFromToday(form.date)} ימים מהיום
+                    </div>
+                  )}
+                </div>
+
+                <button onClick={handleAdd} disabled={syncing}
+                  style={{width:"100%", background:"linear-gradient(135deg,#6b3ec8,#7c5abf,#4a7030)",
+                    border:"none", borderRadius:10, padding:14, color:"#f8f0ff",
+                    fontSize:16, fontWeight:900, cursor: syncing ? "not-allowed" : "pointer",
+                    fontFamily:"'Courier New',monospace", letterSpacing:2,
+                    boxShadow:"0 6px 22px rgba(120,70,210,.3)", opacity: syncing ? 0.7 : 1, transition:"opacity .2s"}}>
+                  {syncing ? "⟳ שומר..." : "🎯 רשום הימור"}
+                </button>
+                <div style={{fontSize:12, color:"#7060a0", textAlign:"center", marginTop:8, lineHeight:1.6}}>
+                  לאחר ההימור — לחצו על כפתור התשלום בפייבוקס וסמנו ששילמתם ✅
+                </div>
+              </div>
+            ) : (
+              <div style={{background:"#100d1e", border:"2px solid #3a2868", borderRadius:16, padding:22, marginBottom:28, textAlign:"center"}}>
+                <div style={{fontSize:32, marginBottom:8}}>⛔</div>
+                <div style={{color:"#c05050", fontWeight:700, letterSpacing:2}}>ההימורים סגורים</div>
+                <div style={{color:"#5a3e90", fontSize:12, marginTop:6}}>הזמן לרשום הימורים חלף ב-18/05/2026</div>
+              </div>
+            )}
+
+            {/* FILTERS */}
+            {bets.length > 0 && (
+              <div style={{display:"flex", gap:8, marginBottom:16, alignItems:"center", flexWrap:"wrap"}}>
+                {[
+                  {key:"all",    label:`הכל (${bets.length})`},
+                  {key:"unpaid", label:`חייבים (${unpaidCount})`},
+                  {key:"paid",   label:`שילמו (${paidCount})`},
+                ].map(f => (
+                  <button key={f.key} onClick={()=>setFilter(f.key)} style={{
+                    padding:"7px 16px",
+                    background: filter===f.key ? "#1e1535" : "transparent",
+                    border:`1px solid ${filter===f.key ? "#8b6fd4" : "#2a2440"}`,
+                    borderRadius:20, cursor:"pointer",
+                    color: filter===f.key ? "#d8b8ff" : "#6a5888",
+                    fontFamily:"'Courier New',monospace", fontSize:13,
+                    fontWeight: filter===f.key ? 700 : 400}}>
+                    {f.label}
+                  </button>
+                ))}
+                <button onClick={load} style={{marginRight:"auto", padding:"7px 12px",
+                  background:"transparent", border:"1px solid #2a2440",
+                  borderRadius:20, cursor:"pointer", color:"#6a5888", fontSize:14}}>⟳</button>
+              </div>
+            )}
+
+            {/* LIST */}
+            {filtered.length === 0 ? (
+              <div style={{textAlign:"center", padding:"50px 20px", border:"2px dashed #1e1838", borderRadius:16}}>
+                <div style={{fontSize:48, marginBottom:12}}>🪖</div>
+                <div style={{fontSize:15, color:"#6a5090"}}>
+                  {bets.length===0 ? "אין הימורים עדיין — מי מתנדב ראשון?" : "אין תוצאות"}
+                </div>
+              </div>
+            ) : (
+              <div style={{display:"flex", flexDirection:"column", gap:10}}>
+                {filtered.map(bet => {
+                  const idx = sorted.findIndex(b=>String(b.id)===String(bet.id));
+                  const daysLeft = daysFromToday(bet.date);
+                  const isPast = daysLeft < 0;
+                  const isMyBet = myInfo && String(myInfo.myId) === String(bet.id);
+                  const isEditing = editingId === String(bet.id);
+                  const isConfirmDel = confirmDel === String(bet.id);
+                  const myPN = isMyBet ? myInfo.personalNum : null;
+
+                  return (
+                    <div key={bet.id} style={{
+                      background: bet.paid ? "#0e1a0c" : "#0f0c1e",
+                      border:`2px solid ${isMyBet ? "#6b4aaa" : (bet.paid ? "#2a3020" : "#221a3c")}`,
+                      borderRadius:13, padding:"14px 14px",
+                      opacity: bet.paid ? 0.75 : 1, transition:"all .2s",
+                      boxShadow: isMyBet ? "0 0 20px rgba(140,80,220,.13)" : "none"}}>
+
+                      {/* Top row */}
+                      <div style={{display:"flex", alignItems:"flex-start", gap:10}}>
+                        <div style={{fontSize:24, minWidth:30, textAlign:"center", paddingTop:3}}>{rankEmoji(idx)}</div>
+                        <div style={{flex:1, minWidth:0}}>
+                          <div style={{fontWeight:900, fontSize:19, color:"#f0ecff", marginBottom:4, display:"flex", alignItems:"center", gap:6, flexWrap:"wrap"}}>
+                            {bet.name}
+                            {isMyBet && <span style={{fontSize:10, color:"#8b6fd4", border:"1px solid #4a3068", borderRadius:4, padding:"1px 6px", fontWeight:400, letterSpacing:1}}>שלי</span>}
+                          </div>
+
+                          {/* Date row */}
+                          {!isEditing && (
+                            <div style={{fontSize:14, color:"#c0a0f8", fontWeight:600, marginBottom:4, display:"flex", alignItems:"center", gap:8, flexWrap:"wrap"}}>
+                              {formatBetDate(bet.date)}
+                              {bet.date && (
+                                <span style={{color: isPast ? "#ff8080" : "#a0c060"}}>
+                                  ({isPast ? `איחר ${Math.abs(daysLeft)} ימים 😅` : `עוד ${daysLeft} יום`})
+                                </span>
+                              )}
+                              {isMyBet && isOpen && !isEditing && (
+                                <span onClick={()=>{setEditingId(String(bet.id)); setEditDate(bet.date); setEditNumInput("");}}
+                                  style={{fontSize:12, color:"#4a3868", cursor:"pointer"}} title="ערוך תאריך">✏️</span>
+                              )}
+                            </div>
+                          )}
+                          <div style={{fontSize:11, color:"#4a3868"}}>נרשם: {new Date(Number(bet.ts)).toLocaleDateString("he-IL")}</div>
+                        </div>
+
+                        {/* Paid toggle — my bet only */}
+                        {isMyBet && (
+                          <div onClick={()=>{
+                            if (myPN) handleTogglePaid(bet, myPN);
+                          }} style={{display:"flex", alignItems:"center", gap:5, cursor:"pointer", userSelect:"none", paddingTop:3, flexShrink:0}}>
+                            <span style={{fontSize:10, color: bet.paid ? "#a0e060" : "#4a3868", fontWeight:700, transition:"color .3s"}}>שולם</span>
+                            <div style={{width:50, height:27, borderRadius:14,
+                              background: bet.paid ? "linear-gradient(135deg,#3a2060,#1a3a10)" : "#1a1628",
+                              border:`2px solid ${bet.paid ? "#8b6fd4" : "#2a2240"}`,
+                              position:"relative", transition:"all .3s",
+                              boxShadow: bet.paid ? "0 0 12px rgba(140,100,220,.4)" : "none"}}>
+                              <div style={{position:"absolute", top:2,
+                                right: bet.paid ? 2 : "auto",
+                                left: bet.paid ? "auto" : 2,
+                                width:19, height:19, borderRadius:"50%",
+                                background: bet.paid ? "#a0e060" : "#3a2e58",
+                                display:"flex", alignItems:"center", justifyContent:"center",
+                                fontSize:10, transition:"all .3s",
+                                boxShadow:"0 1px 4px rgba(0,0,0,.4)"}}>
+                                {bet.paid ? "✅" : "💸"}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        {/* Paid status indicator — others' bets */}
+                        {!isMyBet && (
+                          <div style={{fontSize:18, paddingTop:3, flexShrink:0}}>{bet.paid ? "✅" : "💸"}</div>
+                        )}
+
+                        {/* Delete — my bet, not editing */}
+                        {isMyBet && !isEditing && (
+                          <button onClick={()=>{
+                            if (isConfirmDel) {
+                              doDelete(bet, myPN || delNumInput);
+                            } else {
+                              setConfirmDel(String(bet.id));
+                              setDelNumInput("");
+                              setTimeout(()=>setConfirmDel(null), 3500);
+                            }
+                          }} style={{
+                            background: isConfirmDel ? "#2a0e0e" : "transparent",
+                            border: isConfirmDel ? "1px solid #c05050" : "none",
+                            borderRadius:6, cursor:"pointer", fontSize:11,
+                            padding: isConfirmDel ? "5px 8px" : "5px 4px",
+                            color: isConfirmDel ? "#e06060" : "#2e1e38",
+                            fontFamily:"'Courier New',monospace", transition:"all .2s",
+                            whiteSpace:"nowrap", alignSelf:"flex-start", flexShrink:0}}>
+                            {isConfirmDel ? "בטוח?" : "✕"}
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Edit inline form */}
+                      {isEditing && isMyBet && (
+                        <div style={{marginTop:10}}>
+                          <input type="date" value={editDate} min={todayStr()}
+                            onChange={e=>setEditDate(e.target.value)}
+                            style={{...smallInputStyle, colorScheme:"dark", marginBottom:8}}
+                          />
+                          {!myPN && (
+                            <input value={editNumInput}
+                              onChange={e=>setEditNumInput(e.target.value)}
+                              placeholder="מספר אישי לאימות"
+                              style={{...smallInputStyle, marginBottom:8}}
+                            />
+                          )}
+                          <div style={{display:"flex", gap:8}}>
+                            <button onClick={()=>doEditSave(bet, myPN || editNumInput)}
+                              style={{flex:1, background:"#2a1e48", border:"1px solid #8b6fd4", borderRadius:6, padding:"7px", color:"#c0a0f8", cursor:"pointer", fontSize:12, fontFamily:"'Courier New',monospace"}}>
+                              שמור
+                            </button>
+                            <button onClick={()=>{setEditingId(null); setEditNumInput("");}}
+                              style={{background:"transparent", border:"1px solid #2a2240", borderRadius:6, padding:"7px 14px", color:"#4a3868", cursor:"pointer", fontSize:12}}>
+                              ביטול
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Payment button — my bet only, unpaid */}
+                      {isMyBet && !bet.paid && !isEditing && (
+                        <div style={{marginTop:10}}>
+                          <a href={PAYBOX_URL} target="_blank"
+                            style={{display:"flex", alignItems:"center", justifyContent:"center", gap:8,
+                              background:"#0c1a08", border:"1px solid #3a6020",
+                              borderRadius:8, padding:"9px 12px", color:"#90d850",
+                              fontSize:13, fontWeight:700, textDecoration:"none", letterSpacing:1}}>
+                            💸 שלם פייבוקס
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {bets.length > 0 && (
+              <div style={{textAlign:"center", marginTop:30, color:"#2e2448", fontSize:11, letterSpacing:1}}>
+                📊 Google Sheets · 💸 = לא שילם · ✅ = שילם פייבוקס
+              </div>
+            )}
+
+            <div style={{margin:"40px -18px -60px", padding:"16px 18px", background:"#ffffff", color:"#333333", fontSize:11, lineHeight:1.7, textAlign:"center"}}>
+              <span style={{color:"#000000", fontWeight:700}}>אזהרה:</span> משרד הרווחה והשירותים החברתיים קובע כי הימורים עלולים להיות ממכרים. ניתן ליצור קשר עם מוקד הרווחה למידע וסיוע של משרד הרווחה והשירותים החברתיים שמספרו <span style={{fontWeight:700}}>118</span> (שיחה חינם) 24 שעות ביממה. הזכייה תלויה במזל בלבד, ואינה קשורה לידע, ניסיון, יכולת או ריבוי משחקים.
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(<App/>);
+  </script>
+</body>
+</html>
