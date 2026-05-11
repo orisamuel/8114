@@ -56,7 +56,7 @@
 
     function App() {
       const [bets, setBets] = useState([]);
-      const [form, setForm] = useState({ name: "", personalNum: "", date: "" });
+      const [form, setForm] = useState({ name: "", role: "", personalNum: "", date: "" });
       const [filter, setFilter] = useState("all");
       const [loading, setLoading] = useState(true);
       const [syncing, setSyncing] = useState(false);
@@ -66,7 +66,7 @@
       const [editNumInput, setEditNumInput] = useState("");
       const [confirmDel, setConfirmDel] = useState(null);
       const [delNumInput, setDelNumInput] = useState("");
-      const [paidNumInput, setPaidNumInput] = useState({});
+      const [showRules, setShowRules] = useState(false);
       const pollRef = useRef(null);
 
       const isOpen = new Date() < DEADLINE;
@@ -94,19 +94,21 @@
 
       async function handleAdd() {
         const name = form.name.trim();
+        const role = form.role.trim();
         const personalNum = form.personalNum.trim();
         if (!name) { showNotif("⚠️ שכחת שם!", "warn"); return; }
+        if (!role) { showNotif("⚠️ מה התפקיד שלך?", "warn"); return; }
         if (!personalNum) { showNotif("⚠️ הכנס מספר אישי!", "warn"); return; }
         if (!form.date) { showNotif("⚠️ בחר תאריך!", "warn"); return; }
         if (!isOpen) { showNotif("⛔ ההימורים סגורים", "err"); return; }
         setSyncing(true);
         try {
           const ts = String(Date.now());
-          const res = await api({ action: "add", name, personalNum, date: form.date, ts });
+          const res = await api({ action: "add", name, role, personalNum, date: form.date, ts });
           if (res.error) throw new Error(res.error);
           const id = res.id || ts;
           saveMyInfo({ myId: String(id), personalNum });
-          setForm({ name: "", personalNum: "", date: "" });
+          setForm({ name: "", role: "", personalNum: "", date: "" });
           await load();
           showNotif(`🎯 ${name} נרשם! עכשיו שלם פייבוקס 👇`);
         } catch(e) {
@@ -213,6 +215,34 @@
             </div>
           )}
 
+          {showRules && (
+            <div onClick={()=>setShowRules(false)} style={{
+              position:"fixed", inset:0, background:"rgba(8,5,18,.85)",
+              zIndex:9998, display:"flex", alignItems:"center", justifyContent:"center",
+              padding:18, animation:"slideIn .2s ease"}}>
+              <div onClick={e=>e.stopPropagation()} style={{
+                background:"#100d1e", border:"2px solid #3a2868", borderRadius:14,
+                padding:"24px 22px 20px", maxWidth:520, width:"100%",
+                maxHeight:"90vh", overflowY:"auto", position:"relative",
+                boxShadow:"0 12px 40px rgba(120,80,220,.3)"}}>
+                <div style={{position:"absolute", top:0, right:0, left:0, height:3, background:"linear-gradient(90deg,#8b5fd4,#c0a0f8,#6a9040)", borderRadius:"14px 14px 0 0"}}/>
+                <button onClick={()=>setShowRules(false)} style={{
+                  position:"absolute", top:10, left:10, background:"transparent",
+                  border:"none", color:"#6a5888", fontSize:20, cursor:"pointer",
+                  width:30, height:30, lineHeight:1}}>✕</button>
+                <div style={{fontSize:14, color:"#b090e0", letterSpacing:3, marginBottom:16, fontWeight:600}}>📜 פרטים והנחיות</div>
+                <div style={{fontSize:14, color:"#d0c8f0", lineHeight:1.85, textAlign:"right"}}>
+                  המערכת מסירה כל אחריות ממה שקורה כאן. הכל על אחריותכם המלאה.<br/><br/>
+                  ניתן להמר מספר פעמים ולשלם בהתאם (אבל אל תגזימו. זה לא בריא).<br/><br/>
+                  המערכת תיסגר להימורים חדשים ממש בסוף ימי ההתרעננות של הקו ב-18/5.<br/><br/>
+                  עד לתאריך סגירת ההימורים, תוכלו לערוך את ההימור שלכם באמצעות ה"מספר אישי" שאיתו נרשמתם.<br/><br/>
+                  לאחר מילוי ההימור — כנסו לקישור של הפייבוקס, שלמו וסמנו ששילמתם.<br/><br/>
+                  אם משהו מסתבך — דברו איתי 🪖
+                </div>
+              </div>
+            </div>
+          )}
+
           <div style={{maxWidth:640, margin:"0 auto", padding:"28px 18px 60px"}}>
 
             {/* HEADER */}
@@ -224,23 +254,27 @@
                 WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent"}}>
                 מתי הקו הבא?
               </h1>
-              <div style={{fontSize:13, color:"#c0a0f8", letterSpacing:2, marginTop:4}}>
-                גדוד 8114 · הימרו על תאריך השחרור
+              <div style={{fontSize:13, color:"#c0a0f8", letterSpacing:1, marginTop:6, lineHeight:1.6}}>
+                מבצעים 8114 | מתגעגעים? בואו להמר מתי נפגש שוב!
               </div>
-              <div style={{marginTop:6, fontSize:11, color:"#4a3868"}}>
-                סגירת הימורים: 18/05/2026
+              <div style={{marginTop:6, fontSize:12, color:"#7060a0"}}>
+                ההימורים נסגרים: 18/05/2026
               </div>
-              <div style={{marginTop:8, fontSize:12, color: syncing ? "#a882e8" : "#3a3058", transition:"color .3s"}}>
-                {syncing ? "⟳ מסנכרן..." : "● מחובר · מתעדכן כל 10 שניות"}
-              </div>
+              <button onClick={()=>setShowRules(true)} style={{
+                marginTop:14, background:"transparent", border:"1px solid #4a3868",
+                borderRadius:20, padding:"6px 16px", color:"#a882e8",
+                fontFamily:"'Courier New',monospace", fontSize:12, cursor:"pointer",
+                letterSpacing:1}}>
+                📜 פרטים והנחיות
+              </button>
             </div>
 
             {/* STATS */}
             <div style={{display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginBottom:28}}>
               {[
-                { label:"סה״כ מהמרים", v:bets.length, icon:"👥", color:"#c8b0ff" },
-                { label:"שילמו פייבוקס", v:`${paidCount} / ${bets.length}`, icon:"💸", color:"#b0e870" },
-                { label:"עדיין חייבים", v:unpaidCount, icon:"⏳", color: unpaidCount>0 ? "#ff8080" : "#c8b0ff" },
+                { label:"מספר משתתפים", v:bets.length, icon:"👥", color:"#c8b0ff" },
+                { label:"שילמו", v:`${paidCount} / ${bets.length}`, icon:"💸", color:"#b0e870" },
+                { label:"מניאקים שסתם הימרו ולא שילמו", v:unpaidCount, icon:"⏳", color: unpaidCount>0 ? "#ff8080" : "#c8b0ff" },
               ].map(s => (
                 <div key={s.label} style={{background:"#100d1e", border:"1px solid #2e2550", borderRadius:12, padding:"16px 8px", textAlign:"center"}}>
                   <div style={{fontSize:24, marginBottom:6}}>{s.icon}</div>
@@ -257,11 +291,21 @@
                 <div style={{fontSize:13, color:"#b090e0", letterSpacing:3, marginBottom:20, marginTop:6, fontWeight:600}}>▶ רישום הימור חדש</div>
 
                 <div style={{marginBottom:16}}>
-                  <label style={labelStyle}>שם / כינוי</label>
+                  <label style={labelStyle}>שם מלא</label>
                   <input value={form.name}
                     onChange={e=>setForm({...form,name:e.target.value})}
-                    onKeyDown={e=>e.key==="Enter"&&handleAdd()}
-                    placeholder="מגדל, ג׳ינג׳י, בוסי..."
+                    placeholder="ישראל ישראלי"
+                    style={inputStyle}
+                    onFocus={e=>e.target.style.borderColor="#8b6fd4"}
+                    onBlur={e=>e.target.style.borderColor="#2e2250"}
+                  />
+                </div>
+
+                <div style={{marginBottom:16}}>
+                  <label style={labelStyle}>תפקיד</label>
+                  <input value={form.role}
+                    onChange={e=>setForm({...form,role:e.target.value})}
+                    placeholder='לדוג׳ ע׳ קמ"ן, סרס"מ, רחפן בכיר'
                     style={inputStyle}
                     onFocus={e=>e.target.style.borderColor="#8b6fd4"}
                     onBlur={e=>e.target.style.borderColor="#2e2250"}
@@ -277,14 +321,13 @@
                     onFocus={e=>e.target.style.borderColor="#8b6fd4"}
                     onBlur={e=>e.target.style.borderColor="#2e2250"}
                   />
-                  <div style={{fontSize:11, color:"#8060a0", marginTop:7, lineHeight:1.6, padding:"8px 12px", background:"#0d0b18", borderRadius:7, border:"1px solid #2a1e48"}}>
-                    ⚠️ לא מספר צבאי אמיתי! בחרו מספר שרק אתם יודעים.<br/>
-                    תצטרכו אותו כדי לערוך או למחוק את ההימור שלכם.
+                  <div style={{fontSize:11, color:"#8060a0", marginTop:7, lineHeight:1.7, padding:"10px 13px", background:"#0d0b18", borderRadius:7, border:"1px solid #2a1e48"}}>
+                    ⚠️ וואלאק לא בטוח שכדאי לכם להכניס כאן ממש את המספר האישי שלכם, אני לא מתכנת והמידע בפרויקט הזה מאובטח כמו המוצב במשמרת של מחלקת מודיעין — כולם ישנים. אבל תכניסו מספר שתזכרו אחר כך, כי אם תרצו לערוך את ההימור תצטרכו אותו.
                   </div>
                 </div>
 
                 <div style={{marginBottom:22}}>
-                  <label style={labelStyle}>מתי לדעתך יסתיים הקו?</label>
+                  <label style={labelStyle}>מתי ניפגש שוב בצאלים?</label>
                   <input type="date"
                     value={form.date}
                     min={todayStr()}
@@ -376,14 +419,17 @@
                       <div style={{display:"flex", alignItems:"flex-start", gap:10}}>
                         <div style={{fontSize:24, minWidth:30, textAlign:"center", paddingTop:3}}>{rankEmoji(idx)}</div>
                         <div style={{flex:1, minWidth:0}}>
-                          <div style={{fontWeight:900, fontSize:19, color:"#f0ecff", marginBottom:4, display:"flex", alignItems:"center", gap:6, flexWrap:"wrap"}}>
+                          <div style={{fontWeight:900, fontSize:18, color:"#f0ecff", marginBottom:2, display:"flex", alignItems:"center", gap:6, flexWrap:"wrap"}}>
                             {bet.name}
                             {isMyBet && <span style={{fontSize:10, color:"#8b6fd4", border:"1px solid #4a3068", borderRadius:4, padding:"1px 6px", fontWeight:400, letterSpacing:1}}>שלי</span>}
                           </div>
+                          {bet.role && (
+                            <div style={{fontSize:12, color:"#8060a0", marginBottom:5, fontWeight:500}}>{bet.role}</div>
+                          )}
 
                           {/* Date row */}
                           {!isEditing && (
-                            <div style={{fontSize:14, color:"#c0a0f8", fontWeight:600, marginBottom:4, display:"flex", alignItems:"center", gap:8, flexWrap:"wrap"}}>
+                            <div style={{fontSize:14, color:"#c0a0f8", fontWeight:600, display:"flex", alignItems:"center", gap:8, flexWrap:"wrap"}}>
                               {formatBetDate(bet.date)}
                               {bet.date && (
                                 <span style={{color: isPast ? "#ff8080" : "#a0c060"}}>
@@ -396,7 +442,6 @@
                               )}
                             </div>
                           )}
-                          <div style={{fontSize:11, color:"#4a3868"}}>נרשם: {new Date(Number(bet.ts)).toLocaleDateString("he-IL")}</div>
                         </div>
 
                         {/* Paid toggle — my bet only */}
@@ -411,8 +456,8 @@
                               position:"relative", transition:"all .3s",
                               boxShadow: bet.paid ? "0 0 12px rgba(140,100,220,.4)" : "none"}}>
                               <div style={{position:"absolute", top:2,
-                                right: bet.paid ? 2 : "auto",
-                                left: bet.paid ? "auto" : 2,
+                                right: bet.paid ? "auto" : 2,
+                                left: bet.paid ? 2 : "auto",
                                 width:19, height:19, borderRadius:"50%",
                                 background: bet.paid ? "#a0e060" : "#3a2e58",
                                 display:"flex", alignItems:"center", justifyContent:"center",
