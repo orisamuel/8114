@@ -436,9 +436,9 @@
                                   ({isPast ? `איחר ${Math.abs(daysLeft)} ימים 😅` : `עוד ${daysLeft} יום`})
                                 </span>
                               )}
-                              {isMyBet && isOpen && !isEditing && (
+                              {isOpen && !isEditing && (
                                 <span onClick={()=>{setEditingId(String(bet.id)); setEditDate(bet.date); setEditNumInput("");}}
-                                  style={{fontSize:12, color:"#4a3868", cursor:"pointer"}} title="ערוך תאריך">✏️</span>
+                                  style={{fontSize:14, color:"#7060a0", cursor:"pointer", marginRight:2}} title="ערוך תאריך">✏️</span>
                               )}
                             </div>
                           )}
@@ -497,7 +497,7 @@
                       </div>
 
                       {/* Edit inline form */}
-                      {isEditing && isMyBet && (
+                      {isEditing && (
                         <div style={{marginTop:10}}>
                           <input type="date" value={editDate} min={todayStr()}
                             onChange={e=>setEditDate(e.target.value)}
@@ -543,7 +543,7 @@
 
             {bets.length > 0 && (
               <div style={{textAlign:"center", marginTop:30, color:"#2e2448", fontSize:11, letterSpacing:1}}>
-                📊 Google Sheets · 💸 = לא שילם · ✅ = שילם פייבוקס
+                💸 = לא שילם · ✅ = שילם פייבוקס
               </div>
             )}
 
